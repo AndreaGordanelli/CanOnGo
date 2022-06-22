@@ -1,0 +1,13 @@
+#!/bin/bash
+openvcan="$(ifconfig | grep -Po 'vcan[0-9]*')"
+if [ -z "$openvcan" ]
+then
+	echo "Nessuna vcan attiva"
+else
+	echo "Vcan attive: ${openvcan}"
+	echo "Inserire numero vcan"
+	read nvcan
+	CAN_PORT="vcan${nvcan}"
+	sudo ip link set down $CAN_PORT
+	echo "Virtaul can chiusa nella porta $CAN_PORT"
+fi
