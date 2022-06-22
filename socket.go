@@ -17,10 +17,31 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+const frameSize = unsafe.Sizeof(frame{})
+
 var (
 	errorDataTooBig = errors.New("Frame Data is too big")
 	errorIdTooBig   = errors.New("Frame ID is too big")
 )
+
+type device struct {
+	fd int
+}
+
+// frame is a can_frame.
+type frame struct {
+	ID   [11]int16
+	Len  byte
+	_    [3]byte
+	Data [8]byte
+}
+
+// Socket is a high-level representation of a CANBus socket.
+type Socket struct {
+	Interface *net.Interface
+	Address   *unix.SockaddrCAN
+	Device    device
+}
 
 // New returns a new CAN bus socket.
 func New() (*Socket, error) {
@@ -29,43 +50,43 @@ func New() (*Socket, error) {
 		return nil, err
 	}
 
-	return &Socket{dev: device{fd}}, nil
-}
-
-// Socket is a high-level representation of a CANBus socket.
-type Socket struct {
-	iface *net.Interface
-	addr  *unix.SockaddrCAN
-	dev   device
-}
-
-// Name returns the device name the socket is bound to.
-func (sck *Socket) Name() string {
-	if sck.iface == nil {
-		return "N/A"
-	}
-	return sck.iface.Name
+	return &Socket{Device: device{fd}}, nil
 }
 
 // Close closes the CAN bus socket.
 func (sck *Socket) Close() error {
-	return unix.Close(sck.dev.fd)
+	return unix.Close(sck.Device.fd)
 }
 
 // Bind binds the socket on the CAN bus with the given address.
 //
 // Example:
 //  err = sck.Bind("vcan0")
-func (sck *Socket) Bind(addr string) error {
-	iface, err := net.InterfaceByName(addr)
+func (sck *Socket) Bind(Address string) error {
+	Interface, err := net.InterfaceByName(Address)
 	if err != nil {
 		return err
 	}
 
-	sck.iface = iface
-	sck.addr = &unix.SockaddrCAN{Ifindex: sck.iface.Index}
+	sck.Interface = Interface
+	sck.Address = &unix.SockaddrCAN{Ifindex: sck.Interface.Index}
 
-	return unix.Bind(sck.dev.fd, sck.addr)
+	return unix.Bind(sck.Device.fd, sck.Address)
+}
+func (d device) Write(data []byte) (int, error) {
+	return unix.Write(d.fd, data)
+}
+
+func (d device) Read(data []byte) (int, error) {
+	return unix.Read(d.fd, data)
+}
+
+// iName returns the device name the socket is bound to.
+func (sck *Socket) iName() string {
+	if sck.Interface == nil {
+		return "N/A"
+	}
+	return sck.Interface.Name
 }
 
 // Send sends data with a CAN_frame id to the CAN bus.
@@ -80,14 +101,14 @@ func (sck *Socket) Send(id uint32, data []byte) (int, error) {
 	frame[4] = byte(len(data))
 	copy(frame[8:], data)
 
-	return sck.dev.Write(frame[:])
+	return sck.Device.Write(frame[:])
 }
 
 // Recv receives data from the CAN socket.
 // id is the CAN_frame id the data was originated from.
 func (sck *Socket) Recv() (id uint32, data []byte, err error) {
 	var frame [frameSize]byte
-	n, err := io.ReadFull(sck.dev, frame[:])
+	n, err := io.ReadFull(sck.Device, frame[:])
 	if err != nil {
 		return id, data, err
 	}
@@ -101,26 +122,4 @@ func (sck *Socket) Recv() (id uint32, data []byte, err error) {
 	data = make([]byte, frame[4])
 	copy(data, frame[8:])
 	return id, data, nil
-}
-
-type device struct {
-	fd int
-}
-
-func (d device) Read(data []byte) (int, error) {
-	return unix.Read(d.fd, data)
-}
-
-func (d device) Write(data []byte) (int, error) {
-	return unix.Write(d.fd, data)
-}
-
-const frameSize = unsafe.Sizeof(frame{})
-
-// frame is a can_frame.
-type frame struct {
-	ID   [11]int16
-	Len  byte
-	_    [3]byte
-	Data [8]byte
 }
