@@ -5,7 +5,7 @@
 //      id, data, err := sck.Recv()
 //  }
 //
-package can
+package Can
 
 import (
 	"encoding/binary"
@@ -43,6 +43,18 @@ type Socket struct {
 	Device    device
 }
 
+func NewCan(port string) (*Socket, error) {
+	fd, err := unix.Socket(unix.AF_CAN, unix.SOCK_RAW, unix.CAN_RAW)
+	if err != nil {
+		return nil, err
+	}
+	Iface, err := net.InterfaceByName(port)
+	if err != nil {
+		return nil, err
+	}
+	return &Socket{Iface, &unix.SockaddrCAN{Ifindex: Iface.Index}, device{fd}}, nil
+}
+
 // New returns a new CAN bus socket.
 func New() (*Socket, error) {
 	fd, err := unix.Socket(unix.AF_CAN, unix.SOCK_RAW, unix.CAN_RAW)
@@ -73,6 +85,7 @@ func (sck *Socket) Bind(Address string) error {
 
 	return unix.Bind(sck.Device.fd, sck.Address)
 }
+
 func (d device) Write(data []byte) (int, error) {
 	return unix.Write(d.fd, data)
 }
