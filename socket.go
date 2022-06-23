@@ -43,6 +43,7 @@ type Socket struct {
 	Device    device
 }
 
+// NewCan returns a new CAN bus socket binded with the given address.
 func NewCan(port string) (*Socket, error) {
 	fd, err := unix.Socket(unix.AF_CAN, unix.SOCK_RAW, unix.CAN_RAW)
 	if err != nil {
